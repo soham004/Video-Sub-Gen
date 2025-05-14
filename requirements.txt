@@ -1,0 +1,4 @@
+faster_whisper==1.1.1
+ffmpeg_python==0.2.0
+Pillow==11.2.1
+tqdm==4.67.1
