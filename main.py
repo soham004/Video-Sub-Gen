@@ -1,7 +1,7 @@
+import os
 import ffmpeg
 from PIL import Image, ImageEnhance
 from faster_whisper import WhisperModel
-import os
 import glob
 import subprocess
 import re
@@ -12,10 +12,11 @@ import threading
 from io import StringIO
 import sys
 import random
+import ctranslate2
+ctranslate2.set_log_level(40)
 
-device = "cpu"
 model_size="tiny.en"
-model = WhisperModel(model_size, device=device)
+model = WhisperModel(model_size, device="auto",compute_type="float32")
 
 def apply_saturation(input_image_path, output_image_path, saturation=1.6):
     img = Image.open(input_image_path).convert("RGB")
