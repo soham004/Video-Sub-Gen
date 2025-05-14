@@ -31,7 +31,7 @@ def generate_subtitles(audio_path):
     segments_gen, _ = model.transcribe(audio_path)
     subtitles = []
     last_end = 0
-    with tqdm(total=total_duration, desc="Generating subtitles", unit="s", dynamic_ncols=True,bar_format="{l_bar}{bar}| {n:.2f}/{total:.2f}") as pbar:
+    with tqdm(total=total_duration, desc="Generating subtitles", unit="s", dynamic_ncols=True) as pbar:
         for seg in segments_gen:
             start = seg.start
             end = seg.end
