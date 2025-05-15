@@ -23,35 +23,78 @@ with open("config.json", "r") as f:
     if device_for_subtitile_generation != "auto" and device_for_subtitile_generation != "cpu" and device_for_subtitile_generation != "cuda":
         print(f"Invalid device_for_subtitile_generation value: {device_for_subtitile_generation}\nChoose between\n1. cpu\n2. cuda(for nvidia gpus)\n3. auto \nDefaulting to 'cpu'.")
         device_for_subtitile_generation = "cpu"
+    image_saturation = config["image_saturation"]
+    subtitle_colour_in_BGR_HEX_format = config["subtitle_colour_in_BGR_HEX_format"].replace("#", "")
+    subtitle_outline_colour_in_BGR_HEX_format = config["subtitle_outline_colour_in_BGR_HEX_format"].replace("#", "")
+    subtitle_font_size = config["subtitle_font_size"]
+    subtitle_font = config["subtitle_font"]
+    no_of_concurrent_generations = config["no_of_concurrent_generations"]
+    no_of_chars_per_line = config["no_of_chars_per_line"]
     
 
 model_size="tiny.en"
 model = WhisperModel(model_size, device=device_for_subtitile_generation,compute_type="float32")
 
-def apply_saturation(input_image_path, output_image_path, saturation=1.6):
+def apply_saturation(input_image_path, output_image_path, saturation=image_saturation):
     img = Image.open(input_image_path).convert("RGB")
     enhancer = ImageEnhance.Color(img)
     img_enhanced = enhancer.enhance(saturation)
     img_enhanced.save(output_image_path)
 
-def generate_subtitles(audio_path):
-    # Probe audio duration for progress bar
+def generate_subtitles(audio_path, max_chars_per_segment=no_of_chars_per_line):
+    
     probe = ffmpeg.probe(audio_path)
     total_duration = float(probe['format']['duration'])
 
     segments_gen, _ = model.transcribe(audio_path)
-    subtitles = []
+    raw_subtitles = []
+    final_subtitles = []
     last_end = 0
+    
     with tqdm(total=total_duration, desc="Generating subtitles", unit="s", dynamic_ncols=True) as pbar:
         for seg in segments_gen:
             start = seg.start
             end = seg.end
             text = seg.text.strip().replace('\n', ' ')
-            subtitles.append((start, end, text))
+            raw_subtitles.append((start, end, text))
             pbar.update(round(max(0, end - last_end), 2))
             last_end = end
+            
+        for start, end, text in raw_subtitles:
+            segment_duration = end - start
+            
+            if len(text) <= max_chars_per_segment:
+                final_subtitles.append((start, end, text))
+                continue
+                
+            words = text.split()
+            current_segment = []
+            current_length = 0
+            current_start = start
+            total_chars = len(text)
+            
+            for word in words:
+                if current_length + len(word) + 1 > max_chars_per_segment:
+                    segment_text = ' '.join(current_segment)
+                    chars_ratio = len(segment_text) / total_chars
+                    time_for_segment = segment_duration * chars_ratio
+                    current_end = current_start + time_for_segment
+                    
+                    final_subtitles.append((current_start, current_end, segment_text))
+                    
+                    current_segment = [word]
+                    current_length = len(word)
+                    current_start = current_end
+                else:
+                    current_segment.append(word)
+                    current_length += len(word) + 1 
+            
+            if current_segment:
+                segment_text = ' '.join(current_segment)
+                final_subtitles.append((current_start, end, segment_text))
+    
     print("Subtitles generation completed.\n")
-    return subtitles
+    return final_subtitles
 
 def write_srt(subtitles, srt_path):
     def format_time(seconds):
@@ -66,7 +109,6 @@ def write_srt(subtitles, srt_path):
             f.write(f"{i}\n{format_time(start)} --> {format_time(end)}\n{text}\n\n")
 
 def escape_ffmpeg_path(path):
-    # Only escape backslashes for ffmpeg on Windows
     return path.replace('\\', '\\\\')
 
 def create_video(image_path, audio_path, srt_path, output_path, duration=None):
@@ -80,7 +122,7 @@ def create_video(image_path, audio_path, srt_path, output_path, duration=None):
         '-loop', '1',
         '-i', image_path,
         '-i', audio_path,
-        '-vf', f'scale=1920:1080,subtitles={srt_path}',
+        '-vf', f'scale=1920:1080,subtitles={srt_path}:force_style=\'FontName={subtitle_font},FontSize={subtitle_font_size},PrimaryColour=&H{subtitle_colour_in_BGR_HEX_format}&,OutlineColour=&H{subtitle_outline_colour_in_BGR_HEX_format}&,Bold=0,Alignment=2\'',
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
         '-pix_fmt', 'yuv420p',
@@ -90,7 +132,6 @@ def create_video(image_path, audio_path, srt_path, output_path, duration=None):
     ]
 
     print("Starting ffmpeg export...")
-    # print("FFmpeg command:", " ".join(f'"{c}"' if ' ' in str(c) else str(c) for c in cmd))
     pbar = tqdm(total=duration, unit='s', desc='Rendering', dynamic_ncols=True)
     process = subprocess.Popen(cmd, stderr=subprocess.PIPE, universal_newlines=True)
 
@@ -118,17 +159,14 @@ def create_video(image_path, audio_path, srt_path, output_path, duration=None):
     else:
         print("Export finished.")
 
-# Thread-safe console output management
 console_lock = threading.Lock()
 
 def process_project(project_name, project_path, output_root):
-    # Redirect stdout for this thread to capture progress
     thread_stdout = StringIO()
     original_stdout = sys.stdout
     sys.stdout = thread_stdout
     
     try:
-        # Find image and audio file (supports common formats)
         image_files = glob.glob(os.path.join(project_path, "*.png")) + \
                     glob.glob(os.path.join(project_path, "*.jpg")) + \
                     glob.glob(os.path.join(project_path, "*.jpeg"))
@@ -141,19 +179,17 @@ def process_project(project_name, project_path, output_root):
                 print(f"Skipping {project_name}: missing image or audio.")
             return
 
-        # Setup paths with random numbers for concurrent processing
         random_id = str(random.randint(10000, 99999))
         image_path = os.path.abspath(image_files[0])
         audio_path = os.path.abspath(audio_files[0])
         saturated_image_path = os.path.abspath(f"saturated_{project_name}_{random_id}.png")
         srt_path = f"subtitles_{project_name}_{random_id}.srt"
-        temp_output_video = f"{project_name}_{random_id}.mp4"  # Output in base folder
+        temp_output_video = f"{project_name}_{random_id}.mp4"
         final_output_video = os.path.join(output_root, f"{project_name}.mp4")
 
         with console_lock:
             print(f"\n[{project_name}] Starting processing")
         
-        # Process steps
         apply_saturation(image_path, saturated_image_path)
         with console_lock:
             print(f"[{project_name}] Generating subtitles...")
@@ -161,11 +197,9 @@ def process_project(project_name, project_path, output_root):
         write_srt(subtitles, srt_path)
         create_video(saturated_image_path, audio_path, srt_path, temp_output_video)
         
-        # Move to final destination
         os.makedirs(os.path.dirname(final_output_video), exist_ok=True)
         shutil.move(temp_output_video, final_output_video)
         
-        # Clean up temporary files
         try:
             os.remove(saturated_image_path)
             os.remove(srt_path)
@@ -181,13 +215,11 @@ def process_project(project_name, project_path, output_root):
             print(f"[{project_name}] Error: {str(e)}")
         return False
     finally:
-        # Restore stdout
         sys.stdout = original_stdout
         
-        # Print any captured output with project name prefix
         with console_lock:
             for line in thread_stdout.getvalue().splitlines():
-                if line.strip():  # Only print non-empty lines
+                if line.strip(): 
                     print(f"[{project_name}] {line}")
 
 if __name__ == "__main__":
@@ -195,7 +227,6 @@ if __name__ == "__main__":
     output_root = os.path.abspath("output_files")
     os.makedirs(output_root, exist_ok=True)
     
-    # Get list of project folders
     projects = []
     for project_name in os.listdir(input_root):
         project_path = os.path.join(input_root, project_name)
@@ -204,14 +235,12 @@ if __name__ == "__main__":
     
     print(f"Found {len(projects)} projects to process")
     
-    # Process up to 5 projects concurrently
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=no_of_concurrent_generations) as executor:
         futures = {
             executor.submit(process_project, name, path, output_root): name 
             for name, path in projects
         }
         
-        # As each project completes
         for future in concurrent.futures.as_completed(futures):
             project_name = futures[future]
             try:

@@ -1,3 +1,10 @@
 {
-    "device_for_subtitile_generation": "cpu"
+    "device_for_subtitile_generation": "cpu",
+    "image_saturation": 1.6,
+    "subtitle_colour_in_BGR_HEX_format": "#FFFFFF",
+    "subtitle_outline_colour_in_BGR_HEX_format": "#000000",
+    "subtitle_font": "Aptos",
+    "subtitle_font_size": 14,
+    "no_of_chars_per_line":42,
+    "no_of_concurrent_generations": 3    
 }
