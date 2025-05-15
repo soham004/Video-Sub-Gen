@@ -13,10 +13,20 @@ from io import StringIO
 import sys
 import random
 import ctranslate2
+import json
+
 ctranslate2.set_log_level(40)
 
+with open("config.json", "r") as f:
+    config = json.load(f)
+    device_for_subtitile_generation = config.get("device_for_subtitile_generation", "cpu")
+    if device_for_subtitile_generation != "auto" and device_for_subtitile_generation != "cpu" and device_for_subtitile_generation != "cuda":
+        print(f"Invalid device_for_subtitile_generation value: {device_for_subtitile_generation}\nChoose between\n1. cpu\n2. cuda(for nvidia gpus)\n3. auto \nDefaulting to 'cpu'.")
+        device_for_subtitile_generation = "cpu"
+    
+
 model_size="tiny.en"
-model = WhisperModel(model_size, device="auto",compute_type="float32")
+model = WhisperModel(model_size, device=device_for_subtitile_generation,compute_type="float32")
 
 def apply_saturation(input_image_path, output_image_path, saturation=1.6):
     img = Image.open(input_image_path).convert("RGB")
