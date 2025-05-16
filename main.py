@@ -31,6 +31,7 @@ with open("config.json", "r") as f:
     no_of_concurrent_generations = config["no_of_concurrent_generations"]
     no_of_chars_per_line = config["no_of_chars_per_line"]
     fade_in_duration = config["fade_in_duration_in_seconds"]
+    merge_audio_files_in_each_project = config["merge_audio_files_in_each_project"]
     
 
 model_size="tiny.en"
@@ -235,6 +236,30 @@ if __name__ == "__main__":
         project_path = os.path.join(input_root, project_name)
         if os.path.isdir(project_path):
             projects.append((project_name, project_path))
+
+            if merge_audio_files_in_each_project:
+                audio_files = glob.glob(os.path.join(project_path, "*.mp3"))
+                def extract_first_number(filename):
+                    filename = os.path.basename(filename)
+                    match = re.search(r'(\d+)', filename)
+                    return int(match.group(1)) if match else float('inf')
+                audio_files.sort(key=extract_first_number)
+                print(f"Sorted audio files: {audio_files}")
+                if len(audio_files) > 1:
+                    merged_audio_name = f"{project_name}.mp3"
+                    merged_audio_path = os.path.join(project_path, f"{merged_audio_name}.mp3")
+                    cmd = f"""cd "{project_path}" && ..\\..\\bin\\ffmpeg -y -i "concat:{'|'.join(audio_files)}" -acodec copy "{merged_audio_name}" """
+                    subprocess.run(cmd, shell=True,stdout=subprocess.DEVNULL,
+                                    # stderr=subprocess.DEVNULL,
+                                    creationflags=subprocess.CREATE_NO_WINDOW)
+                    #clean_up the original audio files
+                    for audio_file in audio_files:
+                        if audio_file != merged_audio_path:
+                            try:
+                                os.remove(audio_file)
+                            except Exception as e:
+                                print(f"Warning: Could not delete {audio_file}: {e}")
+                    print(f"Merged audio files into {merged_audio_path}")
     
     print(f"Found {len(projects)} projects to process")
     
