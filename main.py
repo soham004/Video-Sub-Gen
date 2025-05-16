@@ -30,6 +30,7 @@ with open("config.json", "r") as f:
     subtitle_font = config["subtitle_font"]
     no_of_concurrent_generations = config["no_of_concurrent_generations"]
     no_of_chars_per_line = config["no_of_chars_per_line"]
+    fade_in_duration = config["fade_in_duration_in_seconds"]
     
 
 model_size="tiny.en"
@@ -122,7 +123,7 @@ def create_video(image_path, audio_path, srt_path, output_path, duration=None):
         '-loop', '1',
         '-i', image_path,
         '-i', audio_path,
-        '-vf', f'scale=1920:1080,subtitles={srt_path}:force_style=\'FontName={subtitle_font},FontSize={subtitle_font_size},PrimaryColour=&H{subtitle_colour_in_BGR_HEX_format}&,OutlineColour=&H{subtitle_outline_colour_in_BGR_HEX_format}&,Bold=0,Alignment=2\'',
+        '-vf', f'fade=t=in:st=0:d={fade_in_duration},scale=1920:1080,subtitles={srt_path}:force_style=\'FontName={subtitle_font},FontSize={subtitle_font_size},PrimaryColour=&H{subtitle_colour_in_BGR_HEX_format}&,OutlineColour=&H{subtitle_outline_colour_in_BGR_HEX_format}&,Bold=0,Alignment=2\'',
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
         '-pix_fmt', 'yuv420p',
@@ -138,7 +139,9 @@ def create_video(image_path, audio_path, srt_path, output_path, duration=None):
     time_pattern = re.compile(r'time=(\d+):(\d+):(\d+).(\d+)')
     last_seconds = 0
     stderr_lines = []
-
+    if process.stderr is None:
+        print("Error: ffmpeg process has no stderr.")
+        return
     for line in process.stderr:
         stderr_lines.append(line)
         match = time_pattern.search(line)

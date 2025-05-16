@@ -6,5 +6,6 @@
     "subtitle_font": "Aptos",
     "subtitle_font_size": 14,
     "no_of_chars_per_line":42,
-    "no_of_concurrent_generations": 3    
+    "no_of_concurrent_generations": 1,
+    "fade_in_duration_in_seconds": 1.5
 }
