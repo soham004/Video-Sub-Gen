@@ -32,6 +32,7 @@ with open("config.json", "r") as f:
     no_of_chars_per_line = config["no_of_chars_per_line"]
     fade_in_duration = config["fade_in_duration_in_seconds"]
     merge_audio_files_in_each_project = config["merge_audio_files_in_each_project"]
+    vertical_margin = int(config["subtitle_vertical_position_in_pixels"])
     
 
 model_size="tiny.en"
@@ -124,7 +125,7 @@ def create_video(image_path, audio_path, srt_path, output_path, duration=None):
         '-loop', '1',
         '-i', image_path,
         '-i', audio_path,
-        '-vf', f'fade=t=in:st=0:d={fade_in_duration},scale=1920:1080,subtitles={srt_path}:force_style=\'FontName={subtitle_font},FontSize={subtitle_font_size},PrimaryColour=&H{subtitle_colour_in_BGR_HEX_format}&,OutlineColour=&H{subtitle_outline_colour_in_BGR_HEX_format}&,Bold=0,Alignment=2\'',
+        '-vf', f'fade=t=in:st=0:d={fade_in_duration},scale=1920:1080,subtitles={srt_path}:force_style=\'FontName={subtitle_font},FontSize={subtitle_font_size},PrimaryColour=&H{subtitle_colour_in_BGR_HEX_format}&,OutlineColour=&H{subtitle_outline_colour_in_BGR_HEX_format}&,Bold=0,Alignment=2,MarginV={vertical_margin}\'',
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
         '-pix_fmt', 'yuv420p',
@@ -171,19 +172,28 @@ def process_project(project_name, project_path, output_root):
     sys.stdout = thread_stdout
     
     try:
+        # Search for images in the main folder
         image_files = glob.glob(os.path.join(project_path, "*.png")) + \
-                    glob.glob(os.path.join(project_path, "*.jpg")) + \
-                    glob.glob(os.path.join(project_path, "*.jpeg"))
+                      glob.glob(os.path.join(project_path, "*.jpg")) + \
+                      glob.glob(os.path.join(project_path, "*.jpeg"))
+        
+        # If no images found, search recursively in subfolders
+        if not image_files:
+            image_files = glob.glob(os.path.join(project_path, "**", "*.png"), recursive=True) + \
+                          glob.glob(os.path.join(project_path, "**", "*.jpg"), recursive=True) + \
+                          glob.glob(os.path.join(project_path, "**", "*.jpeg"), recursive=True)
+
         audio_files = glob.glob(os.path.join(project_path, "*.mp3")) + \
-                    glob.glob(os.path.join(project_path, "*.wav")) + \
-                    glob.glob(os.path.join(project_path, "*.m4a"))
+                      glob.glob(os.path.join(project_path, "*.wav")) + \
+                      glob.glob(os.path.join(project_path, "*.m4a"))
 
         if not image_files or not audio_files:
             with console_lock:
                 print(f"Skipping {project_name}: missing image or audio.")
             return
 
-        random_id = str(random.randint(10000, 99999))
+        # random_id = str(random.randint(10000, 99999))
+        random_id = str(72272)
         image_path = os.path.abspath(image_files[0])
         audio_path = os.path.abspath(audio_files[0])
         saturated_image_path = os.path.abspath(f"saturated_{project_name}_{random_id}.png")
@@ -197,16 +207,17 @@ def process_project(project_name, project_path, output_root):
         apply_saturation(image_path, saturated_image_path)
         with console_lock:
             print(f"[{project_name}] Generating subtitles...")
-        subtitles = generate_subtitles(audio_path)
-        write_srt(subtitles, srt_path)
+        # subtitles = generate_subtitles(audio_path)
+        # write_srt(subtitles, srt_path)
         create_video(saturated_image_path, audio_path, srt_path, temp_output_video)
         
         os.makedirs(os.path.dirname(final_output_video), exist_ok=True)
         shutil.move(temp_output_video, final_output_video)
         
         try:
-            os.remove(saturated_image_path)
-            os.remove(srt_path)
+            # os.remove(saturated_image_path)
+            # os.remove(srt_path)
+            pass
         except Exception as e:
             with console_lock:
                 print(f"[{project_name}] Warning: Could not delete temp files: {e}")
@@ -244,7 +255,7 @@ if __name__ == "__main__":
                     match = re.search(r'(\d+)', filename)
                     return int(match.group(1)) if match else float('inf')
                 audio_files.sort(key=extract_first_number)
-                print(f"Sorted audio files: {audio_files}")
+                # print(f"Sorted audio files: {audio_files}")
                 if len(audio_files) > 1:
                     merged_audio_name = f"{project_name}.mp3"
                     merged_audio_path = os.path.join(project_path, f"{merged_audio_name}.mp3")
