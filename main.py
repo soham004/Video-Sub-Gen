@@ -192,8 +192,7 @@ def process_project(project_name, project_path, output_root):
                 print(f"Skipping {project_name}: missing image or audio.")
             return
 
-        # random_id = str(random.randint(10000, 99999))
-        random_id = str(72272)
+        random_id = str(random.randint(10000, 99999))
         image_path = os.path.abspath(image_files[0])
         audio_path = os.path.abspath(audio_files[0])
         saturated_image_path = os.path.abspath(f"saturated_{project_name}_{random_id}.png")
@@ -207,17 +206,16 @@ def process_project(project_name, project_path, output_root):
         apply_saturation(image_path, saturated_image_path)
         with console_lock:
             print(f"[{project_name}] Generating subtitles...")
-        # subtitles = generate_subtitles(audio_path)
-        # write_srt(subtitles, srt_path)
+        subtitles = generate_subtitles(audio_path)
+        write_srt(subtitles, srt_path)
         create_video(saturated_image_path, audio_path, srt_path, temp_output_video)
         
         os.makedirs(os.path.dirname(final_output_video), exist_ok=True)
         shutil.move(temp_output_video, final_output_video)
         
         try:
-            # os.remove(saturated_image_path)
-            # os.remove(srt_path)
-            pass
+            os.remove(saturated_image_path)
+            os.remove(srt_path)
         except Exception as e:
             with console_lock:
                 print(f"[{project_name}] Warning: Could not delete temp files: {e}")
