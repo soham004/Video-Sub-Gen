@@ -33,6 +33,9 @@ with open("config.json", "r") as f:
     fade_in_duration = config["fade_in_duration_in_seconds"]
     merge_audio_files_in_each_project = config["merge_audio_files_in_each_project"]
     vertical_margin = int(config["subtitle_vertical_position_in_pixels"])
+    max_subtitle_time = config.get("max_subtitle_time_in_secs", None)
+    if max_subtitle_time == 0:
+        max_subtitle_time = None
     
 
 model_size="tiny.en"
@@ -44,20 +47,26 @@ def apply_saturation(input_image_path, output_image_path, saturation=image_satur
     img_enhanced = enhancer.enhance(saturation)
     img_enhanced.save(output_image_path)
 
-def generate_subtitles(audio_path, max_chars_per_segment=no_of_chars_per_line):
+def generate_subtitles(audio_path, max_chars_per_segment=no_of_chars_per_line,max_subtitle_time=None):
     
     probe = ffmpeg.probe(audio_path)
-    total_duration = float(probe['format']['duration'])
-
+    if max_subtitle_time is not None:
+        print(f"Max subtitle time is set to {max_subtitle_time} seconds.")
+    total_duration = float(probe['format']['duration']) if not max_subtitle_time else max_subtitle_time
     segments_gen, _ = model.transcribe(audio_path)
     raw_subtitles = []
     final_subtitles = []
     last_end = 0
-    
     with tqdm(total=total_duration, desc="Generating subtitles", unit="s", dynamic_ncols=True) as pbar:
         for seg in segments_gen:
             start = seg.start
             end = seg.end
+            # Skip segments that start after the limit
+            if max_subtitle_time is not None and start >= max_subtitle_time:
+                break
+            # Trim segments that end after the limit
+            if max_subtitle_time is not None and end > max_subtitle_time:
+                end = max_subtitle_time
             text = seg.text.strip().replace('\n', ' ')
             raw_subtitles.append((start, end, text))
             pbar.update(round(max(0, end - last_end), 2))
@@ -120,7 +129,7 @@ def create_video(image_path, audio_path, srt_path, output_path, duration=None):
         duration = float(probe['format']['duration'])
 
     cmd = [
-        'ffmpeg',
+        'bin\\ffmpeg',
         '-y',
         '-loop', '1',
         '-i', image_path,
@@ -206,7 +215,7 @@ def process_project(project_name, project_path, output_root):
         apply_saturation(image_path, saturated_image_path)
         with console_lock:
             print(f"[{project_name}] Generating subtitles...")
-        subtitles = generate_subtitles(audio_path)
+        subtitles = generate_subtitles(audio_path, max_subtitle_time=max_subtitle_time)
         write_srt(subtitles, srt_path)
         create_video(saturated_image_path, audio_path, srt_path, temp_output_video)
         

@@ -9,5 +9,6 @@
     "no_of_concurrent_generations": 1,
     "fade_in_duration_in_seconds": 0.8,
     "subtitle_vertical_position_in_pixels": 30,
+    "max_subtitle_time_in_secs": 900,
     "merge_audio_files_in_each_project": true
 }

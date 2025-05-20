@@ -3,3 +3,5 @@
 *.srt
 input_files/
 output/
+*.exe
+_internal/
