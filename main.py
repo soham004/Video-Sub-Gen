@@ -34,6 +34,9 @@ with open("config.json", "r") as f:
     merge_audio_files_in_each_project = config["merge_audio_files_in_each_project"]
     vertical_margin = int(config["subtitle_vertical_position_in_pixels"])
     max_subtitle_time = config.get("max_subtitle_time_in_secs", None)
+    playback_speed = float(config["playback_speed"])
+    if playback_speed == 0:
+        playback_speed = 1.0
     if max_subtitle_time == 0:
         max_subtitle_time = None
     
@@ -108,7 +111,7 @@ def generate_subtitles(audio_path, max_chars_per_segment=no_of_chars_per_line,ma
     print("Subtitles generation completed.\n")
     return final_subtitles
 
-def write_srt(subtitles, srt_path):
+def write_srt(subtitles, srt_path, speed=1.0):
     def format_time(seconds):
         ms = int((seconds - int(seconds)) * 1000)
         h = int(seconds // 3600)
@@ -118,33 +121,73 @@ def write_srt(subtitles, srt_path):
 
     with open(srt_path, "w", encoding="utf-8") as f:
         for i, (start, end, text) in enumerate(subtitles, 1):
-            f.write(f"{i}\n{format_time(start)} --> {format_time(end)}\n{text}\n\n")
+            # Adjust timestamps based on playback speed
+            adjusted_start = start / speed
+            adjusted_end = end / speed
+            f.write(f"{i}\n{format_time(adjusted_start)} --> {format_time(adjusted_end)}\n{text}\n\n")
 
 def escape_ffmpeg_path(path):
     return path.replace('\\', '\\\\')
 
-def create_video(image_path, audio_path, srt_path, output_path, duration=None):
+def create_video(image_path, audio_path, srt_path, output_path, duration=None, speed=1.0):
     if duration is None:
         probe = ffmpeg.probe(audio_path)
         duration = float(probe['format']['duration'])
-
+    
+    # Calculate adjusted duration based on speed
+    adjusted_duration = duration / speed
+    
+    # Generate atempo filters for speeds outside 0.5-2.0 range
+    def generate_atempo_filters(target_speed):
+        if target_speed == 1.0:
+            return None
+        
+        filters = []
+        remaining_speed = target_speed
+        
+        while remaining_speed > 2.0:
+            filters.append("atempo=2.0")
+            remaining_speed /= 2.0
+        
+        while remaining_speed < 0.5:
+            filters.append("atempo=0.5")
+            remaining_speed /= 0.5
+        
+        if remaining_speed != 1.0:
+            filters.append(f"atempo={remaining_speed}")
+        
+        return ",".join(filters)
+    
+    # Set up video/audio filters for speed adjustment
+    vf = f'fade=t=in:st=0:d={fade_in_duration},setpts={1/speed}*PTS,scale=1920:1080,subtitles={srt_path}:force_style=\'FontName={subtitle_font},FontSize={subtitle_font_size},PrimaryColour=&H{subtitle_colour_in_BGR_HEX_format}&,OutlineColour=&H{subtitle_outline_colour_in_BGR_HEX_format}&,Bold=0,Alignment=2,MarginV={vertical_margin}\''
+    
+    # Generate audio tempo filter chain
+    af = generate_atempo_filters(speed)
+    
     cmd = [
         'bin\\ffmpeg',
         '-y',
         '-loop', '1',
         '-i', image_path,
         '-i', audio_path,
-        '-vf', f'fade=t=in:st=0:d={fade_in_duration},scale=1920:1080,subtitles={srt_path}:force_style=\'FontName={subtitle_font},FontSize={subtitle_font_size},PrimaryColour=&H{subtitle_colour_in_BGR_HEX_format}&,OutlineColour=&H{subtitle_outline_colour_in_BGR_HEX_format}&,Bold=0,Alignment=2,MarginV={vertical_margin}\'',
+        '-vf', vf
+    ]
+    
+    # Add audio filter if needed
+    if af:
+        cmd.extend(['-af', af])
+    
+    cmd.extend([
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
         '-pix_fmt', 'yuv420p',
         '-c:a', 'aac',
         '-shortest',
         output_path
-    ]
+    ])
 
     print("Starting ffmpeg export...")
-    pbar = tqdm(total=duration, unit='s', desc='Rendering', dynamic_ncols=True)
+    pbar = tqdm(total=adjusted_duration, unit='s', desc='Rendering', dynamic_ncols=True)
     process = subprocess.Popen(cmd, stderr=subprocess.PIPE, universal_newlines=True)
 
     time_pattern = re.compile(r'time=(\d+):(\d+):(\d+).(\d+)')
@@ -163,7 +206,7 @@ def create_video(image_path, audio_path, srt_path, output_path, duration=None):
             last_seconds = seconds
 
     process.wait()
-    pbar.n = duration
+    pbar.n = adjusted_duration
     pbar.refresh()
     pbar.close()
 
@@ -216,8 +259,8 @@ def process_project(project_name, project_path, output_root):
         with console_lock:
             print(f"[{project_name}] Generating subtitles...")
         subtitles = generate_subtitles(audio_path, max_subtitle_time=max_subtitle_time)
-        write_srt(subtitles, srt_path)
-        create_video(saturated_image_path, audio_path, srt_path, temp_output_video)
+        write_srt(subtitles, srt_path, speed=playback_speed)
+        create_video(saturated_image_path, audio_path, srt_path, temp_output_video, speed=playback_speed)
         
         os.makedirs(os.path.dirname(final_output_video), exist_ok=True)
         shutil.move(temp_output_video, final_output_video)
