@@ -126,8 +126,6 @@ def write_srt(subtitles, srt_path, speed=1.0):
             adjusted_end = end / speed
             f.write(f"{i}\n{format_time(adjusted_start)} --> {format_time(adjusted_end)}\n{text}\n\n")
 
-def escape_ffmpeg_path(path):
-    return path.replace('\\', '\\\\')
 
 def create_video(image_path, audio_path, srt_path, output_path, duration=None, speed=1.0):
     if duration is None:

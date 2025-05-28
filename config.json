@@ -6,10 +6,10 @@
     "subtitle_font": "Aptos",
     "subtitle_font_size": 14,
     "no_of_chars_per_line":42,
-    "no_of_concurrent_generations": 1,
+    "no_of_concurrent_generations": 3,
     "fade_in_duration_in_seconds": 0.8,
     "subtitle_vertical_position_in_pixels": 30,
-    "max_subtitle_time_in_secs": 0,
+    "max_subtitle_time_in_secs": 900,
     "merge_audio_files_in_each_project": true,
     "playback_speed": 1.0
 }
